@@ -21,8 +21,8 @@ namespace smart_ptr
         public:
             /* constructors */
             constexpr base_linked_ptr() :           // default ctor
-                    prev(this),
-                    next(this)
+                    prev(nullptr),
+                    next(nullptr)
             {}
 
             virtual ~base_linked_ptr();             // destructor
@@ -33,9 +33,6 @@ namespace smart_ptr
             void swap(base_linked_ptr & other) noexcept;
         };
 
-        template <class T, 
-                  class = typename std::enable_if<std::is_destructible<T>::value>::type>
-        inline void is_complete_type(T * rhs) noexcept;
     } // namespace details
 
     template <class T>
@@ -49,26 +46,26 @@ namespace smart_ptr
         constexpr linked_ptr() noexcept;                // default ctor
 
         constexpr linked_ptr(details::nullptr_t) :
-                linked_ptr() {};                        // ctor from null pointer
+                linked_ptr() {}                         // ctor from null pointer
 
         explicit linked_ptr(T * rhs);                   // ctor from pointer
 
         // not pretty sure how to implement this outside the class, so let it be here at least for now :)
-        template <class U, 
-                  class = typename std::enable_if<std::is_convertible<U*, T*>::value>::type>
-        linked_ptr(U * rhs) : data(rhs) { };            // ctor from convertible type
+        template <class U,
+                class = typename std::enable_if<std::is_convertible<U*, T*>::value>::type>
+        linked_ptr(U * rhs) : data(rhs) { }             // ctor from convertible type
 
         linked_ptr(linked_ptr<T> const& rhs);           // copy ctor
 
-        template <class U, 
-                  class = typename std::enable_if<std::is_convertible<U*, T*>::value>::type>
+        template <class U,
+                class = typename std::enable_if<std::is_convertible<U*, T*>::value>::type>
         linked_ptr(linked_ptr<U> const& rhs) :          // copy from convertible type ctor
                 data(rhs.get())
         {
             insert((details::base_linked_ptr&)rhs);
         }
 
-        /* TODO: implement 
+        /* TODO: implement
         linked_ptr(linked_ptr<T> && rhs) = delete;
 
         template <class U>
@@ -93,8 +90,8 @@ namespace smart_ptr
         /* operators */
         linked_ptr & operator=(linked_ptr const& rhs) noexcept;     // copy assignment operator
 
-        template <class U, 
-                  class = typename std::enable_if<std::is_convertible<U*, T*>::value>::type>
+        template <class U,
+                class = typename std::enable_if<std::is_convertible<U*, T*>::value>::type>
         linked_ptr & operator=(linked_ptr<U> const& rhs) noexcept   // copy assignment from convertible type operator
         {
             linked_ptr<T> temp(rhs);
@@ -102,11 +99,11 @@ namespace smart_ptr
             return *this;
         }
 
-        /* TODO: implement 
-        linked_ptr & operator=(linked_ptr<T> && rhs) = delete;      
+        /* TODO: implement
+        linked_ptr & operator=(linked_ptr<T> && rhs) = delete;
 
         template <class U>
-        linked_ptr & operator=(linked_ptr<U> && rhs) = delete;      
+        linked_ptr & operator=(linked_ptr<U> && rhs) = delete;
         */
 
         T & operator*() const noexcept;
@@ -120,7 +117,10 @@ namespace smart_ptr
     {
         next           = rhs.next;
         prev           = &rhs;
-        rhs.next->prev = this;
+        if (rhs.next)
+        {
+            rhs.next->prev = this;
+        }
         rhs.next       = this;
     }
 
@@ -142,20 +142,6 @@ namespace smart_ptr
         }
     }
 
-    template <class T, 
-              class = typename std::enable_if<std::is_destructible<T>::value>::type>
-    inline void details::is_complete_type(T * rhs) noexcept
-    {
-        // if T is incomplete, sizeof should generate compile error
-        typedef char type_must_be_complete[sizeof(T) ? 1 : -1];
-        
-        // if sizeof returns 0 (depends on the compiler), we'll get compile error at least here
-        // cast to void so to be sure that compiler will not optimize it
-        static_cast<void>(sizeof(type_must_be_complete));
-
-        delete(rhs);
-    }
-
     template <class T>
     constexpr linked_ptr<T>::linked_ptr() noexcept :
             data(nullptr)
@@ -164,7 +150,9 @@ namespace smart_ptr
     template <class T>
     linked_ptr<T>::linked_ptr(T * rhs) :
             data(rhs)
-    {}
+    {
+        static_assert(sizeof(T), "Incomplete type");
+    }
 
     template <class T>
     linked_ptr<T>::linked_ptr(linked_ptr<T> const& rhs) :
@@ -176,24 +164,26 @@ namespace smart_ptr
     template <class T>
     linked_ptr<T>::~linked_ptr()
     {
-        if (next == prev 
-         && next == this)
+        if (next == nullptr
+            && prev == nullptr)
         {
-            details::is_complete_type<T>(data);
+            delete data;
         }
     }
 
     template <class T>
     void linked_ptr<T>::reset() noexcept
     {
-
-        if (next == prev 
-         && next == this)
+        if (next == prev
+            && next == this)
         {
-            details::is_complete_type<T>(data);
+            delete data;
         }
-        next->prev = prev;
-        prev->next = next;
+        if (next != nullptr)
+        {
+            next->prev = prev;
+            prev->next = next;
+        }
         next       = nullptr;
         prev       = nullptr;
         data       = nullptr;
@@ -202,6 +192,8 @@ namespace smart_ptr
     template <class T>
     void linked_ptr<T>::reset(T * rhs)
     {
+        static_assert(sizeof(T), "Incomplete type");
+
         linked_ptr<T> temp(rhs);
         swap(temp);
     }
@@ -215,9 +207,9 @@ namespace smart_ptr
     template <class T>
     bool linked_ptr<T>::unique() const noexcept
     {
-        return (next == prev 
-             && next == this 
-             && data != nullptr);
+        return (next == nullptr
+                && prev == nullptr
+                && data != nullptr);
     }
 
     template <class T>
