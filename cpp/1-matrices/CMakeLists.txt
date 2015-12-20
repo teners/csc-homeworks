@@ -1,0 +1,8 @@
+project(matrices)
+set(SOURCE_EXE main.cpp)
+set(SOURCE_LIB matrices.cpp)
+set(CMAKE_CXX_COMPILER g++)
+set(CMAKE_CXX_FLAGS "-std=c++11 -Wall -O2") 
+add_library(matrices STATIC ${SOURCE_LIB})
+add_executable(matrices ${SOURCE_EXE})
+target_link_libraries(main matrices)
